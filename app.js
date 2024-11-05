@@ -6,6 +6,7 @@ const path = require("path");
 const methodOverride = require("method-override");
 const ejsMate = require("ejs-mate");
 const wrapAsync = require("./utils/wrapAsync.js");
+const ExpressError = require("./utils/ExpressError.js");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/wanderlust";
 
@@ -33,7 +34,7 @@ app.get("/", (req, res) => {
 });
 
 // Index Route
-app.get("/listings", async (req, res) => {
+app.get("/listings", wrapAsync(async (req, res) => {
     try {
         const allListings = await Listing.find({});
         res.render("listings/index", { allListings }); // Ensure this matches the template variable
@@ -41,7 +42,7 @@ app.get("/listings", async (req, res) => {
         console.error(error);
         res.status(500).send("Internal Server Error");
     }
-});
+}));
 
 //New Route
 app.get("/listings/new", (req, res) => {
@@ -49,7 +50,7 @@ app.get("/listings/new", (req, res) => {
 });
 
 // Show Route
-app.get("/listings/:id", async (req, res) => { // Corrected from app,get to app.get
+app.get("/listings/:id", wrapAsync(async (req, res) => { // Corrected from app,get to app.get
     const { id } = req.params;
     try {
         const listing = await Listing.findById(id);
@@ -62,51 +63,65 @@ app.get("/listings/:id", async (req, res) => { // Corrected from app,get to app.
         console.error(error);
         res.status(500).send("Internal Server Error");
     }
-});
+}));
 
 //Create Route
 app.post(
     "/listings",
     wrapAsync(async (req, res, next) => {
-      const newListing = new Listing(req.body.listing);
-      await newListing.save();
-      res.redirect("/listings");
+        if (!req.body.listing) {
+            throw new ExpressError(400, "Send valid data for listing")
+        }
+        const newListing = new Listing(req.body.listing);
+        if (!newListing.title) {
+            throw new ExpressError(400, "Title is missing");
+        }
+        if (!newListing.description) {
+            throw new ExpressError(400, "Description is missing");
+        }
+        if (!newListing.location) {
+            throw new ExpressError(400, "Location is missing");
+        }
+        await newListing.save();
+        res.redirect("/listings");
     })
 );
 
 //edit route
-app.get("/listings/:id/edit", async (req, res) => {
+app.get("/listings/:id/edit", wrapAsync(async (req, res) => {
     let { id } = req.params;
     const listing = await Listing.findById(id);
     res.render("listings/edit.ejs", { listing });
+}));
+
+//Update Route
+app.put("/listings/:id", wrapAsync(async (req, res) => {
+    if (!req.body.listing) {
+        throw new ExpressError(400, "Send valid data for listing")
+    }
+    let { id } = req.params;
+    await Listing.findByIdAndUpdate(id, { ...req.body.listing }); // Corrected model name
+    res.redirect(`/listings/${id}`);
+}));
+
+//Delete Route
+app.delete("/listings/:id", wrapAsync(async (req, res) => {
+    let { id } = req.params;
+    let deletedListing = await Listing.findByIdAndDelete(id);
+    console.log(deletedListing);
+    res.redirect("/listings");
+}));
+
+app.all("*", (req, res, next) => {
+    next(new ExpressError(404, "Page Not Found"));
 });
 
 app.use((err, req, res, next) => {
-    res.send("something wend wrong!");
-});
-
-//Update Route
-app.put("/listings/:id", async (req, res) => {
-    let { id } = req.params;
-    try {
-        await Listing.findByIdAndUpdate(id, { ...req.body.listing }); // Corrected model name
-        res.redirect(`/listings/${id}`);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Error updating listing");
-    }
-});
-
-//Delete Route
-app.delete("/listings/:id", async (req, res) => {
-    let { id } = req.params;
-    let deletedListing = await Listing.findByIdAndDelete(id); // Corrected variable name
-    console.log(deletedListing); // Logs the deleted listing for debugging
-    res.redirect("/listings"); // Corrected redirect path
+    const { statusCode = 500, message = "something went wrong" } = err;
+    res.status(statusCode).render("error.ejs", { message });
+    // res.status(statusCode).send(message);
 });
 
 app.listen(8080, () => {
     console.log("server is listening to port 8080");
 });
-
-
