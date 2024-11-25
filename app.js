@@ -8,6 +8,7 @@ const ejsMate = require("ejs-mate");
 const wrapAsync = require("./utils/wrapAsync.js");
 const ExpressError = require("./utils/ExpressError.js");
 const { listingSchema } = require("./schema.js");
+const Review = require("./models/review.js");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/wanderlust";
 
@@ -61,19 +62,13 @@ app.get("/listings/new", (req, res) => {
 });
 
 // Show Route
-app.get("/listings/:id", wrapAsync(async (req, res) => { // Corrected from app,get to app.get
+app.get("/listings/:id", wrapAsync(async (req, res) => {
     const { id } = req.params;
-    try {
-        const listing = await Listing.findById(id);
-        if (listing) {
-            res.render("listings/show", { listing }); // Assuming you want to render a show view for the listing
-        } else {
-            res.status(404).send("Listing not found");
-        }
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Internal Server Error");
+    const listing = await Listing.findById(id).populate("reviews");
+    if(!listing) {
+        throw new ExpressError(404, "Listing not found");
     }
+    res.render("listings/show", { listing })
 }));
 
 //Create Route
@@ -111,6 +106,36 @@ app.delete("/listings/:id", wrapAsync(async (req, res) => {
     console.log(deletedListing);
     res.redirect("/listings");
 }));
+
+//reviews
+//Post Route
+app.post("/listings/:id/reviews", async (req, res, next) => {
+    try {
+        console.log("Request Params:", req.params); // Log params
+        console.log("Request Body:", req.body);     // Log body
+
+        const listing = await Listing.findById(req.params.id);
+        if (!listing) {
+            console.log("Listing not found");
+            return res.status(404).send("Listing not found");
+        }
+
+        const newReview = new Review(req.body.review);
+        console.log("New Review Data:", newReview);
+
+        listing.reviews.push(newReview);
+
+        await newReview.save();
+        await listing.save();
+
+        console.log("Review successfully saved");
+        res.redirect(`/listings/${listing._id}`);
+    } catch (err) {
+        console.error("Error in POST /listings/:id/reviews:", err);
+        next(err); // Pass to error handler
+    }
+});
+
 
 app.all("*", (req, res, next) => {
     next(new ExpressError(404, "Page Not Found"));

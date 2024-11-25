@@ -27,16 +27,18 @@
     <div class="col-8 offset-3 mb-3">
         <hr>
         <h4>Leave a Review</h4>
-        <form>
+       <!-- <p>Listing ID: <%= listing._id %></p> -->
+        <form action="/listings/<%= listing._id %>/reviews" method="POST">
             <div class="mb-3 mt-3">
                 <label for="rating" class="form-label">Rating</label>
                 <input
                   type="range"
                   min="1"
-                  min="5"
+                  max="5"
                   id="rating"
                   class="form-range"
                   name="review[rating]"
+                  required
                 />
             </div>
             <div class="mb-3 mt-3">
@@ -47,6 +49,7 @@
                   id="comment"
                   cols="30"
                   row="5"
+                  required
                 ></textarea>
             </div>
             <button class="btn btn-outline-dark">Submit</button>
