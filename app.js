@@ -7,7 +7,7 @@ const methodOverride = require("method-override");
 const ejsMate = require("ejs-mate");
 const wrapAsync = require("./utils/wrapAsync.js");
 const ExpressError = require("./utils/ExpressError.js");
-const { listingSchema } = require("./schema.js");
+const { listingSchema, reviewSchema } = require("./schema.js");
 const Review = require("./models/review.js");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/wanderlust";
@@ -37,6 +37,16 @@ app.get("/", (req, res) => {
 
 const validateListing = (req, res, next) => {
     let { error } = listingSchema.validate(req.body);
+    if (error) {
+        let errMsg = error.details.map((el) => el.message).join(","); 
+        throw new ExpressError(400, errMsg);
+    } else {
+        next();
+    }
+};
+
+const validateReviews = (req, res, next) => {
+    let { error } = reviewSchema.validate(req.body);
     if (error) {
         let errMsg = error.details.map((el) => el.message).join(","); 
         throw new ExpressError(400, errMsg);
@@ -109,32 +119,35 @@ app.delete("/listings/:id", wrapAsync(async (req, res) => {
 
 //reviews
 //Post Route
-app.post("/listings/:id/reviews", async (req, res, next) => {
-    try {
-        console.log("Request Params:", req.params); // Log params
-        console.log("Request Body:", req.body);     // Log body
-
-        const listing = await Listing.findById(req.params.id);
-        if (!listing) {
-            console.log("Listing not found");
-            return res.status(404).send("Listing not found");
+app.post("/listings/:id/reviews",
+    validateReview,
+    wrapAsync(async (req, res, next) => {
+        try {
+            console.log("Request Params:", req.params); // Log params
+            console.log("Request Body:", req.body);     // Log body
+    
+            const listing = await Listing.findById(req.params.id);
+            if (!listing) {
+                console.log("Listing not found");
+                return res.status(404).send("Listing not found");
+            }
+    
+            const newReview = new Review(req.body.review);
+            console.log("New Review Data:", newReview);
+    
+            listing.reviews.push(newReview);
+    
+            await newReview.save();
+            await listing.save();
+    
+            console.log("Review successfully saved");
+            res.redirect(`/listings/${listing._id}`);
+        } catch (err) {
+            console.error("Error in POST /listings/:id/reviews:", err);
+            next(err); // Pass to error handler
         }
-
-        const newReview = new Review(req.body.review);
-        console.log("New Review Data:", newReview);
-
-        listing.reviews.push(newReview);
-
-        await newReview.save();
-        await listing.save();
-
-        console.log("Review successfully saved");
-        res.redirect(`/listings/${listing._id}`);
-    } catch (err) {
-        console.error("Error in POST /listings/:id/reviews:", err);
-        next(err); // Pass to error handler
-    }
-});
+    })
+);
 
 
 app.all("*", (req, res, next) => {
